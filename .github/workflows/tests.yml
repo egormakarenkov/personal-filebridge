@@ -8,8 +8,8 @@ jobs:
   test:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
       - name: Install
@@ -56,7 +56,7 @@ jobs:
           Compress-Archive -Path "$package/*" -DestinationPath $zip -Force
           if (-not (Test-Path -LiteralPath $zip)) { throw 'Portable ZIP was not created.' }
       - name: Upload portable build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: PersonalFilebridge-Windows-portable
           path: ${{ runner.temp }}/PersonalFilebridge-Windows-portable.zip
