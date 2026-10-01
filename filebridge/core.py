@@ -262,6 +262,27 @@ class FileBridge:
     def _save_recovery_manifest(self, recovery_id: str, manifest: dict[str, Any]) -> None:
         (self.recovery_dir / (recovery_id + ".json")).write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
 
+    def _validated_recovery_manifest(self, recovery_id: str) -> dict[str, Any]:
+        manifest_path = self.recovery_dir / (recovery_id + ".json")
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if not isinstance(manifest, dict) or str(uuid.UUID(manifest["recovery_id"])) != recovery_id:
+                raise ValueError("Recovery ID mismatch")
+            if manifest["operation"] not in ("copy", "move") or manifest["kind"] not in ("file", "directory"):
+                raise ValueError("Invalid recovery operation or kind")
+            if manifest["operation"] == "copy" and manifest["kind"] != "file":
+                raise ValueError("Invalid recovery copy")
+            self._path(manifest["original_path"], allow_missing=True)
+            source = self.recovery_dir / recovery_id
+            info = source.lstat()
+            if stat.S_ISLNK(info.st_mode) or bool(getattr(info, "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)):
+                raise ValueError("Recovery item is a link")
+            if (manifest["kind"] == "file") != source.is_file():
+                raise ValueError("Recovery item kind mismatch")
+            return manifest
+        except (KeyError, TypeError, ValueError, OSError, FileBridgeError) as error:
+            raise FileBridgeError(f"Recovery item is invalid or missing: {error}") from None
+
     def commit_write_text(self, operation_id: str) -> dict[str, Any]:
         with self.lock:
             operation = self._load_op(operation_id, "write")
@@ -396,11 +417,8 @@ class FileBridge:
             if len(items) >= limit:
                 break
             try:
-                record = json.loads(manifest_path.read_text(encoding="utf-8"))
-                recovery_id = str(uuid.UUID(record["recovery_id"]))
-                self._path(record["original_path"], allow_missing=True)
-                if (self.recovery_dir / recovery_id).exists():
-                    items.append(record)
+                recovery_id = str(uuid.UUID(manifest_path.stem))
+                items.append(self._validated_recovery_manifest(recovery_id))
             except (KeyError, ValueError, OSError, FileBridgeError):
                 continue
         return {"items": items}
@@ -412,10 +430,7 @@ class FileBridge:
             raise FileBridgeError("Invalid recovery ID") from None
         with self.lock:
             manifest_path = self.recovery_dir / (normalized_id + ".json")
-            try:
-                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            except FileNotFoundError:
-                raise FileBridgeError("Recovery item not found") from None
+            manifest = self._validated_recovery_manifest(normalized_id)
             target = self._path(manifest["original_path"], allow_missing=True)
             if target.exists() or not target.parent.is_dir():
                 raise FileBridgeError("Original path is occupied or its parent is missing")

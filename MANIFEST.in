@@ -1,0 +1,5 @@
+include setup.ps1 uninstall.ps1 run.ps1 run-stdio.cmd install.cmd dashboard.cmd SECURITY.md CONTRIBUTING.md
+include portable.py PersonalFilebridge.spec
+recursive-include docs *.md
+prune docs/superpowers
+recursive-include scripts *.py

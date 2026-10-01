@@ -11,6 +11,12 @@ from typing import Any
 APPROVAL_TIMEOUT_SECONDS = 120
 
 
+def _approval_command(timeout_seconds: int) -> list[str]:
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--approval-dialog", str(timeout_seconds)]
+    return [sys.executable, "-m", "filebridge.approval", str(timeout_seconds)]
+
+
 def request_local_approval(preview: dict[str, Any], timeout_seconds: int = APPROVAL_TIMEOUT_SECONDS) -> bool:
     """Ask the person at this PC to approve one operation; errors always deny."""
     if not isinstance(preview, dict) or not preview.get("path") or not preview.get("operation_id"):
@@ -19,7 +25,7 @@ def request_local_approval(preview: dict[str, Any], timeout_seconds: int = APPRO
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "filebridge.approval", str(timeout_seconds)],
+            _approval_command(timeout_seconds),
             input=json.dumps(preview, ensure_ascii=False),
             text=True,
             capture_output=True,

@@ -97,6 +97,43 @@ class ServerTests(unittest.TestCase):
 
         asyncio.run(run())
 
+    def test_server_instructions_explain_revision_recovery_and_local_approval(self):
+        instructions = self.server.instructions.lower()
+        for required in ("sha-256", "recovery", "local windows", "prepare", "commit"):
+            self.assertIn(required, instructions)
+
+    def test_preview_version_is_distinct_from_published_v010(self):
+        self.assertEqual(self.server.version, "0.2.0b1")
+
+    def test_tool_lifecycle_with_disposable_file(self):
+        target = self.root / "lifecycle.txt"
+        target.write_text("first", encoding="utf-8")
+
+        async def run():
+            read = await self.server.call_tool("read_text", {"path": str(target)})
+            revision = read.structured_content["sha256"]
+            prepared = await self.server.call_tool("prepare_write_text", {
+                "path": str(target), "text": "second", "expected_sha256": revision,
+            })
+            self.assertEqual(target.read_text(encoding="utf-8"), "first")
+            changed = await self.server.call_tool("commit_write", {
+                "operation_id": prepared.structured_content["operation_id"],
+            })
+            self.assertEqual(target.read_text(encoding="utf-8"), "second")
+            self.assertTrue(changed.structured_content["recovery_id"])
+            deletion = await self.server.call_tool("prepare_delete", {"path": str(target)})
+            deleted = await self.server.call_tool("commit_delete", {
+                "operation_id": deletion.structured_content["operation_id"],
+            })
+            self.assertFalse(target.exists())
+            restored = await self.server.call_tool("restore_recovery", {
+                "recovery_id": deleted.structured_content["recovery_id"],
+            })
+            self.assertFalse(restored.is_error)
+            self.assertEqual(target.read_text(encoding="utf-8"), "second")
+
+        asyncio.run(run())
+
 
 if __name__ == "__main__":
     unittest.main()

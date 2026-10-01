@@ -27,6 +27,8 @@ jobs:
           $config = Get-Content -LiteralPath (Join-Path $env:LOCALAPPDATA 'PersonalFilebridge\config.json') -Raw | ConvertFrom-Json
           if ($config.allowed_roots.Count -ne 1 -or $config.allowed_roots[0] -ne $root) { throw 'Setup did not save the selected root.' }
           .\.venv\Scripts\python.exe -m filebridge.server --help
+          $dashboard = .\.venv\Scripts\python.exe -m filebridge.dashboard --check --state-dir (Join-Path $env:LOCALAPPDATA 'PersonalFilebridge') --recovery-dir (Join-Path $env:USERPROFILE 'Filebridge Recovery') | ConvertFrom-Json
+          if ($dashboard.status -ne 'Configured' -or $dashboard.allowed_roots.Count -ne 1) { throw 'Dashboard did not load the fresh setup.' }
       - name: Build distributions
         run: python -m build
       - name: Check distributions
@@ -38,3 +40,23 @@ jobs:
           if ($packages.Count -eq 0) { throw 'No distributions were built.' }
           python -m twine check $packages
           if ($LASTEXITCODE -ne 0) { throw 'Distribution check failed.' }
+      - name: Build portable Windows app
+        shell: pwsh
+        run: |
+          python -m pip install pyinstaller==6.22.3
+          if ($LASTEXITCODE -ne 0) { throw 'Could not install portable build tooling.' }
+          python -m PyInstaller --noconfirm --clean PersonalFilebridge.spec
+          if ($LASTEXITCODE -ne 0) { throw 'Portable build failed.' }
+          python scripts/smoke_portable.py dist/PersonalFilebridge/PersonalFilebridge.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Portable MCP smoke test failed.' }
+          $package = 'dist/PersonalFilebridge'
+          Copy-Item setup.ps1,uninstall.ps1,run.ps1,run-stdio.cmd,install.cmd,dashboard.cmd,README.md,SECURITY.md,CONTRIBUTING.md,LICENSE -Destination $package
+          Copy-Item docs -Destination $package -Recurse
+          $zip = Join-Path $env:RUNNER_TEMP 'PersonalFilebridge-Windows-portable.zip'
+          Compress-Archive -Path "$package/*" -DestinationPath $zip -Force
+          if (-not (Test-Path -LiteralPath $zip)) { throw 'Portable ZIP was not created.' }
+      - name: Upload portable build
+        uses: actions/upload-artifact@v4
+        with:
+          name: PersonalFilebridge-Windows-portable
+          path: ${{ runner.temp }}/PersonalFilebridge-Windows-portable.zip
