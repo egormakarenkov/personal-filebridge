@@ -1,13 +1,13 @@
 [project]
 name = "personal-filebridge"
-version = "0.1.0"
+version = "0.2.0b1"
 description = "Owner-approved local Windows file operations through MCP"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.13"
 dependencies = ["mcp==2.2.0"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Environment :: Win32 (MS Windows)",
     "Operating System :: Microsoft :: Windows :: Windows 11",
     "Programming Language :: Python :: 3",

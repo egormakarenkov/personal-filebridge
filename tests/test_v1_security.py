@@ -1,4 +1,5 @@
 import os
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -146,6 +147,33 @@ class V1SecurityTests(unittest.TestCase):
             restricted.restore_recovery(deleted["recovery_id"])
         self.assertFalse(target.exists())
         self.assertEqual(len(restricted.list_recovery()["items"]), 1)
+
+    def test_restore_rejects_tampered_recovery_manifest(self):
+        target = self.data / "gone.txt"
+        target.write_text("saved", encoding="utf-8")
+        bridge = self.bridge(roots=[self.data], approver=lambda preview: True)
+        operation = bridge.prepare_delete(str(target), permanent=False)
+        deleted = bridge.commit_delete(operation["operation_id"])
+        recovery_id = deleted["recovery_id"]
+        manifest_path = self.root / "recovery" / f"{recovery_id}.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["operation"] = "unexpected"
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        with self.assertRaises(FileBridgeError):
+            bridge.restore_recovery(recovery_id)
+        self.assertFalse(target.exists())
+
+    def test_failed_replace_leaves_original_file_unchanged(self):
+        target = self.data / "locked.txt"
+        target.write_text("before", encoding="utf-8")
+        bridge = self.bridge(roots=[self.data], approver=lambda preview: True)
+        read = bridge.read_text(str(target))
+        operation = bridge.prepare_write_text(str(target), "after", read["sha256"])
+        with patch("filebridge.core.os.replace", side_effect=PermissionError("locked")):
+            with self.assertRaises(PermissionError):
+                bridge.commit_write_text(operation["operation_id"])
+        self.assertEqual(target.read_text(encoding="utf-8"), "before")
+        self.assertEqual(list(self.data.glob(".filebridge-*.tmp")), [])
 
 
 if __name__ == "__main__":

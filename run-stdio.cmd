@@ -1,5 +1,9 @@
 @echo off
 setlocal
+if exist "%~dp0PersonalFilebridge.exe" (
+  "%~dp0PersonalFilebridge.exe" --transport stdio
+  exit /b %ERRORLEVEL%
+)
 set "PYTHON_EXE=%~dp0.venv\Scripts\python.exe"
 if not exist "%PYTHON_EXE%" (
   echo Personal Filebridge is not installed. Run setup.ps1 first. 1>&2

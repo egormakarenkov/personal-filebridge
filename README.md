@@ -1,6 +1,6 @@
 # Personal Filebridge
 
-Personal Filebridge is a local MCP server for inspecting, editing, deleting, and restoring files in folders you select. It is a **Windows 11 source release candidate** for technical users. Installation currently uses Python and PowerShell; there is no bundled `.exe` installer or signed binary.
+Personal Filebridge is a local MCP server for inspecting, editing, deleting, and restoring files in folders you select. It is a **Windows 11 release candidate** with a double-click setup launcher and read-only dashboard. The source installation requires Python 3.13 or newer. The portable Windows build bundles Python so users do not need to install it. The portable executable is unsigned and still needs a clean interactive installation check before a stable release.
 
 The server runs as your Windows account. It cannot bypass Windows permissions, UAC, file locks, organization policy, or MCP host policy. It connects over **local stdio**. Public network hosting and unattended phone approval are outside V1.
 
@@ -22,11 +22,13 @@ The MCP client can read files inside your chosen roots, so choose folders narrow
 
 ## Install from source
 
-Download or clone this repository to a folder you control. In PowerShell, open that folder and run:
+Download the repository ZIP from GitHub or clone it to a folder you control, then extract it. Alternatively, download the portable Windows ZIP from a release or CI artifact and extract the whole folder, including `_internal`; moving the executable alone will break it. On Windows, double-click `install.cmd`. The window stays open to show any setup error. For a PowerShell installation, open the source folder and run:
 
 ```powershell
 .\setup.ps1
 ```
+
+The portable ZIP uses `PersonalFilebridge.exe` and needs no Python installation. Source setup stops before creating an environment if Python 3.13 or newer is missing. Select only folders you want the connected MCP client to read and modify. Setup may ask you to confirm before replacing a previous Filebridge configuration.
 
 The installer asks for one or more **existing absolute folder paths** to allow, then creates `.venv`, installs dependencies, and writes `%LOCALAPPDATA%\PersonalFilebridge\config.json`. On a fresh install, it restricts the state and recovery directories and config file to your Windows account. Existing child files may retain older permissions; inspect them if you are migrating from an earlier installation. It refuses an empty list, drive roots, and link or reparse-point roots. If the Codex CLI is available, it registers the private Python environment as an MCP server named `personal-filebridge`. If that name is already registered, setup leaves it unchanged and tells you to review it. Restart your MCP client after registration.
 
@@ -46,7 +48,17 @@ To register manually with Codex, run this from PowerShell using the absolute pat
 codex mcp add personal-filebridge -- "C:\absolute\path\to\filebridge\.venv\Scripts\python.exe" -m filebridge.server --transport stdio
 ```
 
-Then restart Codex and call `health`. For another MCP client, configure a stdio server that runs `.venv\Scripts\python.exe -m filebridge.server --transport stdio` from this source folder. `run-stdio.cmd` is provided for clients that accept batch-file commands. There is no HTTP listener in V1.
+Then restart Codex and call `health`. For another MCP client, configure a stdio server using `run-stdio.cmd` from the installed folder. Source installations can also run `.venv\Scripts\python.exe -m filebridge.server --transport stdio`; portable installations can run `PersonalFilebridge.exe --transport stdio`. There is no HTTP listener in V1.
+
+For model-facing usage instructions, see [Agent guide](docs/AGENT_GUIDE.md). You can attach that file to a ChatGPT or Claude conversation, but a guide does not connect tools: the client must separately support and connect a local stdio MCP server. The server also exposes its essential workflow through MCP instructions and tool descriptions, although each client decides how to present them.
+
+## Local dashboard
+
+After setup, double-click `dashboard.cmd` to see the configured folders, recent operation metadata, and recoverable items. The dashboard is read-only: it does not edit configuration, read personal file contents, restore files, or approve actions. Restore through the MCP client and the local approval dialog. For a quick status check without opening a window, run:
+
+```powershell
+.\.venv\Scripts\python.exe -m filebridge.dashboard --check
+```
 
 ## File operations and approval
 
@@ -71,7 +83,7 @@ The automated tests use disposable directories. They should not touch personal f
 .\.venv\Scripts\python.exe -m build
 ```
 
-GitHub Actions runs tests and checks source and wheel distributions on Windows. A source-first release needs a clean Windows installation check before publishing: install, configure a disposable root, call `health`, inspect and read a test file, prepare and approve a change, restore it, and uninstall. There is no bundled executable at this stage.
+GitHub Actions runs tests, source-package checks, a disposable setup, distribution checks, and a portable executable smoke test on Windows. A stable release also needs the human checks in [Release checklist](docs/RELEASE_CHECKLIST.md), especially a clean interactive install and approval-dialog walkthrough.
 
 ## Uninstall
 
@@ -84,6 +96,8 @@ The script asks before removing Codex registration or the private Python environ
 ## Troubleshooting
 
 - **`health` is missing:** restart the MCP client and check its server registration. Confirm `run-stdio.cmd` points to this source folder and setup created `.venv`.
+- **Install reports Python missing:** for source installation, install Python 3.13 or newer with the Python launcher or `python` on your path, then rerun `install.cmd`. The portable ZIP does not need Python.
+- **Dashboard does not open:** run `dashboard.cmd` after setup. If Python reports that Tkinter is unavailable, install a Python build that includes Tk support.
 - **Configuration error:** rerun setup and select an existing folder. Verify `%LOCALAPPDATA%\PersonalFilebridge\config.json` is valid JSON with a nonempty `allowed_roots` array.
 - **Path denied:** the requested path must be within a selected folder. The bridge also rejects protected service state, reparse points, and unsafe paths.
 - **Commit denied or times out:** bring this Windows desktop forward and approve the dialog before the operation expires. A remote client cannot approve it by itself.

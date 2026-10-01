@@ -41,11 +41,15 @@ def load_allowed_roots(state_dir: Path) -> list[Path]:
 def make_server(bridge: FileBridge) -> MCPServer:
     mcp = MCPServer(
         name="personal-filebridge",
-        version="0.1.0",
+        version="0.2.0b1",
         instructions=(
-            "Inspect a target before changing it. For writes and deletes, prepare first and "
-            "show the exact path and effect to the user. Commit requires a separate approval "
-            "on the local Windows desktop. Permanent deletion cannot be restored."
+            "Inspect the exact target before changing it. For an existing file edit, read it and "
+            "supply its SHA-256 revision to prepare_write. For writes and deletes, prepare first, "
+            "then show the user the exact path, effect, size, and directory entry count when present. "
+            "Explain whether recovery is available and respect the user's and host's approval rules. "
+            "Commit requires a separate approval on the local Windows desktop; remote chat approval "
+            "does not replace that dialog. Prepared operations expire after ten minutes. Verify the "
+            "result and report any recovery ID. Permanent deletion cannot be restored."
         ),
     )
     read = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False)
@@ -94,12 +98,12 @@ def make_server(bridge: FileBridge) -> MCPServer:
 
     @mcp.tool(annotations=write)
     def prepare_delete(path: str, permanent: bool = False) -> dict[str, Any]:
-        """Stage deletion of an exact file or directory path."""
+        """Stage an exact path deletion and report entries, estimated bytes, and permanence. Default is recoverable."""
         return bridge.prepare_delete(path, permanent=permanent)
 
     @mcp.tool(annotations=destructive)
     def commit_delete(operation_id: str) -> dict[str, Any]:
-        """Request local owner approval, then delete a staged path."""
+        """Request local Windows owner approval, then delete the staged path. Permanent deletion is irreversible."""
         return bridge.commit_delete(operation_id)
 
     @mcp.tool(annotations=read)

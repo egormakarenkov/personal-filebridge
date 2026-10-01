@@ -9,6 +9,7 @@ if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) { throw 'LOCALAPPDATA is re
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $venvDir = Join-Path $projectRoot '.venv'
 $python = Join-Path $venvDir 'Scripts\python.exe'
+$portableExe = Join-Path $projectRoot 'PersonalFilebridge.exe'
 $stateDir = Join-Path $env:LOCALAPPDATA 'PersonalFilebridge'
 $configPath = Join-Path $stateDir 'config.json'
 $recoveryDir = Join-Path $env:USERPROFILE 'Filebridge Recovery'
@@ -67,19 +68,34 @@ foreach ($root in $AllowedRoots) {
 $validatedRoots = @($validatedRoots | Select-Object -Unique)
 if ($validatedRoots.Count -eq 0) { throw 'At least one allowed folder is required. No configuration was written.' }
 
-$pythonLauncher = Get-Command py -ErrorAction SilentlyContinue
-if (-not (Test-Path -LiteralPath $python)) {
-    if ($pythonLauncher) {
-        & py -3 -m venv $venvDir
-    } else {
-        & python -m venv $venvDir
+if (Test-Path -LiteralPath $portableExe) {
+    & $portableExe --transport init | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'The portable executable did not start. Try the source installation.' }
+    $serverCommand = $portableExe
+    $serverArgs = @('--transport', 'stdio')
+} else {
+    $pythonLauncher = Get-Command py -ErrorAction SilentlyContinue
+    if (-not (Test-Path -LiteralPath $python)) {
+        if ($pythonLauncher) {
+            & py -3 -c 'import sys; assert sys.version_info >= (3, 13), "Python 3.13 or newer is required"'
+            if ($LASTEXITCODE -ne 0) { throw 'Install Python 3.13 or newer, then run setup again.' }
+            & py -3 -m venv $venvDir
+        } else {
+            $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
+            if (-not $pythonCommand) { throw 'Install Python 3.13 or newer, then run setup again.' }
+            & python -c 'import sys; assert sys.version_info >= (3, 13), "Python 3.13 or newer is required"'
+            if ($LASTEXITCODE -ne 0) { throw 'Install Python 3.13 or newer, then run setup again.' }
+            & python -m venv $venvDir
+        }
+        if ($LASTEXITCODE -ne 0) { throw 'Python 3.13+ is required to create the environment.' }
     }
-    if ($LASTEXITCODE -ne 0) { throw 'Python 3.13+ is required to create the environment.' }
+    & $python -c 'import sys; assert sys.version_info >= (3, 13), "Python 3.13+ required"'
+    if ($LASTEXITCODE -ne 0) { throw 'The Python environment must use Python 3.13 or newer.' }
+    & $python -m pip install --upgrade $projectRoot
+    if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
+    $serverCommand = $python
+    $serverArgs = @('-m', 'filebridge.server', '--transport', 'stdio')
 }
-& $python -c 'import sys; assert sys.version_info >= (3, 13), "Python 3.13+ required"'
-if ($LASTEXITCODE -ne 0) { throw 'The Python environment must use Python 3.13 or newer.' }
-& $python -m pip install --upgrade $projectRoot
-if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
 
 New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
 New-Item -ItemType Directory -Force -Path $recoveryDir | Out-Null
@@ -109,7 +125,7 @@ if (-not $SkipCodexRegistration) {
         if ($LASTEXITCODE -eq 0) {
             Write-Warning 'An MCP server named personal-filebridge already exists. It was left unchanged; review it before switching to this installation.'
         } else {
-            & codex mcp add personal-filebridge -- $python -m filebridge.server --transport stdio
+            & codex mcp add personal-filebridge -- $serverCommand @serverArgs
             if ($LASTEXITCODE -ne 0) { throw 'Codex registration failed. The local installation and configuration are available.' }
             Write-Host 'Registered personal-filebridge with Codex. Restart Codex, then call health.'
         }
