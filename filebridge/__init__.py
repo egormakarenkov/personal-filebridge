@@ -1,0 +1,1 @@
+"""Personal Filebridge MCP service."""
